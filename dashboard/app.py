@@ -15,8 +15,11 @@ def load_data():
     df['date'] = df['created_at'].dt.date
     return df
 
+# Crear app Dash
 app = dash.Dash(__name__)
+server = app.server  # <--- necesario para Gunicorn en Render
 
+# Layout
 app.layout = html.Div([
     html.H1("📈 Tendencias en X (Twitter)"),
     dcc.Dropdown(id="keyword_selector", multi=True, placeholder="Selecciona keywords"),
@@ -24,6 +27,7 @@ app.layout = html.Div([
     dcc.Interval(id="interval", interval=60*1000, n_intervals=0)  # refresco cada minuto
 ])
 
+# Callback para actualizar keywords
 @app.callback(
     dash.dependencies.Output("keyword_selector", "options"),
     dash.dependencies.Output("keyword_selector", "value"),
@@ -35,6 +39,7 @@ def update_keywords(_):
     options = [{"label": k, "value": k} for k in keywords]
     return options, list(keywords)  # selecciona todos por defecto
 
+# Callback para actualizar gráfico
 @app.callback(
     dash.dependencies.Output("trend_chart", "figure"),
     dash.dependencies.Input("keyword_selector", "value"),
@@ -46,9 +51,15 @@ def update_chart(selected_keywords, _):
         return px.line()
     df = df[df["keyword"].isin(selected_keywords)]
     df_grouped = df.groupby(["date", "keyword"]).size().reset_index(name="count")
-    fig = px.line(df_grouped, x="date", y="count", color="keyword",
-                  title="Tendencia de tweets por keyword")
+    fig = px.line(
+        df_grouped,
+        x="date",
+        y="count",
+        color="keyword",
+        title="Tendencia de tweets por keyword"
+    )
     return fig
 
+# Bloque para pruebas locales
 if __name__ == "__main__":
     app.run_server(debug=True)
