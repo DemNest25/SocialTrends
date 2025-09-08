@@ -5,13 +5,16 @@ import plotly.express as px
 import pandas as pd
 from sqlalchemy import create_engine
 
-# Usar DATABASE_URL de Render
-POSTGRES_URL = os.environ.get("DATABASE_URL")
+# Usar la variable correcta (Render usa DATABASE_URL por defecto)
+POSTGRES_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 engine = create_engine(POSTGRES_URL)
 
 def load_data():
     query = "SELECT keyword, created_at FROM tweets"
     df = pd.read_sql(query, engine)
+    if df.empty:
+        return df
+    df = df.dropna(subset=["keyword"])  # 🔥 quitar keywords nulos
     df['created_at'] = pd.to_datetime(df['created_at'])
     df['date'] = df['created_at'].dt.date
     return df
@@ -38,9 +41,9 @@ def update_keywords(_):
     df = load_data()
     if df.empty:
         return [], []
-    keywords = df["keyword"].unique()
+    keywords = sorted([k for k in df["keyword"].unique() if k])  # 🔥 quitar nulos/vacíos
     options = [{"label": k, "value": k} for k in keywords]
-    return options, list(keywords)
+    return options, keywords
 
 # Callback para actualizar gráfico
 @app.callback(

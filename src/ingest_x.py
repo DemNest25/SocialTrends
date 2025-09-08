@@ -1,3 +1,4 @@
+import keyword
 import time
 import tweepy
 from datetime import datetime, timezone
@@ -44,7 +45,8 @@ def run_once():
                         reply_count=pm.get("reply_count", 0),
                         like_count=pm.get("like_count", 0),
                         quote_count=pm.get("quote_count", 0),
-                        raw=t.data  # guarda JSON crudo
+                        raw=t.data,
+                        keyword=keyword
                     )
                     if not db.get(Tweet, tw.id):
                         db.add(tw)
