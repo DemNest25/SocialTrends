@@ -1,12 +1,13 @@
+import os
 import dash
 from dash import dcc, html
 import plotly.express as px
 import pandas as pd
 from sqlalchemy import create_engine
-from src import config
 
-# Conexión a Postgres
-engine = create_engine(config.POSTGRES_URL)
+# Usar DATABASE_URL de Render
+POSTGRES_URL = os.environ.get("DATABASE_URL")
+engine = create_engine(POSTGRES_URL)
 
 def load_data():
     query = "SELECT keyword, created_at FROM tweets"
@@ -17,7 +18,7 @@ def load_data():
 
 # Crear app Dash
 app = dash.Dash(__name__)
-server = app.server  # <--- necesario para Gunicorn en Render
+server = app.server  # necesario para Gunicorn en Render
 
 # Layout
 app.layout = html.Div([
@@ -35,9 +36,11 @@ app.layout = html.Div([
 )
 def update_keywords(_):
     df = load_data()
+    if df.empty:
+        return [], []
     keywords = df["keyword"].unique()
     options = [{"label": k, "value": k} for k in keywords]
-    return options, list(keywords)  # selecciona todos por defecto
+    return options, list(keywords)
 
 # Callback para actualizar gráfico
 @app.callback(
@@ -47,8 +50,8 @@ def update_keywords(_):
 )
 def update_chart(selected_keywords, _):
     df = load_data()
-    if not selected_keywords:
-        return px.line()
+    if df.empty or not selected_keywords:
+        return px.line()  # gráfico vacío
     df = df[df["keyword"].isin(selected_keywords)]
     df_grouped = df.groupby(["date", "keyword"]).size().reset_index(name="count")
     fig = px.line(
