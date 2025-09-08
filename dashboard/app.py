@@ -5,16 +5,13 @@ import plotly.express as px
 import pandas as pd
 from sqlalchemy import create_engine
 
-# Usar la variable correcta (Render usa DATABASE_URL por defecto)
-POSTGRES_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+# Usar DATABASE_URL de Render o local
+POSTGRES_URL = os.environ.get("DATABASE_URL") or "postgresql+psycopg2://postgres:postgres@localhost:5432/socialtrends"
 engine = create_engine(POSTGRES_URL)
 
 def load_data():
-    query = "SELECT keyword, created_at FROM tweets"
+    query = "SELECT keyword, created_at FROM tweets WHERE keyword IS NOT NULL"
     df = pd.read_sql(query, engine)
-    if df.empty:
-        return df
-    df = df.dropna(subset=["keyword"])  # 🔥 quitar keywords nulos
     df['created_at'] = pd.to_datetime(df['created_at'])
     df['date'] = df['created_at'].dt.date
     return df
@@ -26,37 +23,22 @@ server = app.server  # necesario para Gunicorn en Render
 # Layout
 app.layout = html.Div([
     html.H1("📈 Tendencias en X (Twitter)"),
-    dcc.Dropdown(id="keyword_selector", multi=True, placeholder="Selecciona keywords"),
     dcc.Graph(id="trend_chart"),
     dcc.Interval(id="interval", interval=60*1000, n_intervals=0)  # refresco cada minuto
 ])
 
-# Callback para actualizar keywords
-@app.callback(
-    dash.dependencies.Output("keyword_selector", "options"),
-    dash.dependencies.Output("keyword_selector", "value"),
-    dash.dependencies.Input("interval", "n_intervals")
-)
-def update_keywords(_):
-    df = load_data()
-    if df.empty:
-        return [], []
-    keywords = sorted([k for k in df["keyword"].unique() if k])  # 🔥 quitar nulos/vacíos
-    options = [{"label": k, "value": k} for k in keywords]
-    return options, keywords
-
-# Callback para actualizar gráfico
+# Callback para actualizar gráfico automáticamente
 @app.callback(
     dash.dependencies.Output("trend_chart", "figure"),
-    dash.dependencies.Input("keyword_selector", "value"),
     dash.dependencies.Input("interval", "n_intervals")
 )
-def update_chart(selected_keywords, _):
+def update_chart(_):
     df = load_data()
-    if df.empty or not selected_keywords:
-        return px.line()  # gráfico vacío
-    df = df[df["keyword"].isin(selected_keywords)]
+    if df.empty:
+        return px.line(title="No hay datos aún")
+    
     df_grouped = df.groupby(["date", "keyword"]).size().reset_index(name="count")
+    
     fig = px.line(
         df_grouped,
         x="date",
