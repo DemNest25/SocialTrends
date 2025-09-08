@@ -1,0 +1,20 @@
+# render.yaml - plantilla para Render (ajusta nombres si quieres)
+services:
+  - type: web
+    name: social-trends-web
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn dashboard.app:server --workers 2 --bind 0.0.0.0:$PORT
+    # opcional: health check route, envVars se manejan desde la UI por seguridad
+
+cronJobs:
+  - name: social-trends-scraper
+    schedule: "0,15,30,45 * * * *"   # cada 15 minutos (0,15,30,45)
+    command: python -m src.ingest_x
+    env: {}   # no poner secretos aquí; se usan las env vars que configures en el servicio
+
+databases:
+  - name: social-trends-db
+    plan: starter
+    disk: 10
