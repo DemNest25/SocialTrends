@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON
 from .db import Base
 from datetime import datetime
 
@@ -14,8 +14,8 @@ class Tweet(Base):
     reply_count = Column(Integer, default=0)
     like_count = Column(Integer, default=0)
     quote_count = Column(Integer, default=0)
-    raw = Column(JSON)   # guarda el JSON completo del tweet
-    keyword = Column(String, index=True)  # opcional: para relacionar tweet con keyword usada
+    raw = Column(JSON)
+    keyword = Column(String, index=True)
 
 class Keyword(Base):
     __tablename__ = "keywords"

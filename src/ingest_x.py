@@ -1,14 +1,9 @@
-import os
 import time
-from datetime import datetime
 from sqlalchemy.orm import Session
-from src.db import engine, Base, Tweet
-import tweepy  # asegúrate de tener tweepy instalado
-
-# Config
-X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN")
-X_KEYWORDS = os.environ.get("X_KEYWORDS", "python,IA,tecnologia").split(",")
-INGEST_INTERVAL_MIN = int(os.environ.get("INGEST_INTERVAL_MIN", 10))
+from .db import engine, Base, SessionLocal
+from .models import Tweet
+from .config import X_BEARER_TOKEN, X_KEYWORDS
+import tweepy
 
 # Inicializar Twitter client
 client = tweepy.Client(bearer_token=X_BEARER_TOKEN, wait_on_rate_limit=True)
@@ -20,27 +15,37 @@ def init_db():
 def run_once():
     """Ejecuta una ronda de ingestión de tweets"""
     init_db()
-    with Session(engine) as session:
+    with SessionLocal() as session:
+        if not X_KEYWORDS:
+            print("No hay keywords configuradas 😅")
+            return
+
         for keyword in X_KEYWORDS:
             query = f"({keyword}) lang:es -is:retweet"
             print(f"[X] Buscando: {query}")
+            
+            tweets_data = []
             try:
-                tweets = client.search_recent_tweets(query=query, max_results=100,
-                                                     tweet_fields=['id', 'text', 'author_id', 'created_at', 'lang', 'public_metrics'])
+                tweets = client.search_recent_tweets(
+                    query=query,
+                    max_results=20,  # reducir para no alcanzar límite
+                    tweet_fields=['id', 'text', 'author_id', 'created_at', 'lang', 'public_metrics']
+                )
+                if tweets.data:
+                    tweets_data = tweets.data
+                else:
+                    print(f"[!] No se encontraron tweets para '{keyword}'")
             except tweepy.TooManyRequests as e:
-                # Rate limit excedido
-                print(f"Rate limit exceeded. Sleeping for {e.retry_after} seconds.")
+                print(f"Rate limit exceeded. Sleeping for {e.retry_after} segundos...")
                 time.sleep(e.retry_after + 1)
-                continue
+            except Exception as e:
+                print(f"[!] Error buscando tweets: {e}")
 
-            if not tweets.data:
-                continue
-
-            for tw in tweets.data:
-                # Revisar si ya existe
+            # Guardar tweets que sí llegaron
+            new_count = 0
+            for tw in tweets_data:
                 if session.get(Tweet, tw.id):
                     continue
-
                 t = Tweet(
                     id=tw.id,
                     text=tw.text,
@@ -51,19 +56,14 @@ def run_once():
                     reply_count=tw.public_metrics.get("reply_count", 0),
                     like_count=tw.public_metrics.get("like_count", 0),
                     quote_count=tw.public_metrics.get("quote_count", 0),
-                    raw=str(tw),
-                    keyword=keyword  # <-- Guardamos la keyword correcta
+                    raw=tw.data,
+                    keyword=keyword
                 )
                 session.add(t)
-            session.commit()
+                new_count += 1
 
-def run_loop():
-    """Loop infinito cada INGEST_INTERVAL_MIN"""
-    while True:
-        print(f"[{datetime.now()}] Iniciando ingestión...")
-        run_once()
-        print(f"[{datetime.now()}] Dormir {INGEST_INTERVAL_MIN} minutos...")
-        time.sleep(INGEST_INTERVAL_MIN * 60)
+            session.commit()
+            print(f"[X] Guardados nuevos: {new_count} para '{keyword}'")
 
 if __name__ == "__main__":
-    run_loop()
+    run_once()
